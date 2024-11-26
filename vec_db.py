@@ -11,7 +11,18 @@ class VecDB:
     def __init__(self, database_file_path = "saved_db.dat", index_file_path = "index.dat", new_db = True, db_size = None) -> None:
         self.db_path = database_file_path
         self.index_path = index_file_path
-        self.ivfpq = IVFPQ()
+        self.ivfpq = IVFPQ(20,8,6)
+        self._build_index()
+
+        if new_db and db_size:
+            rng = np.random.default_rng(DB_SEED_NUMBER)
+            temp_data = rng.random((db_size, DIMENSION), dtype=np.float32)
+            nlist, nsubvectors, nbits = adjust_parameters(temp_data)
+        else:
+            nlist, nsubvectors, nbits = 20, 8, 6  # Default values
+
+        self.ivfpq = IVFPQ(nlist, nsubvectors, nbits)
+
         if new_db:
             if db_size is None:
                 raise ValueError("You need to provide the size of the database")
@@ -42,7 +53,7 @@ class VecDB:
         mmap_vectors[num_old_records:] = rows
         mmap_vectors.flush()
         #TODO: might change to call insert in the index, if you need
-        self._build_index()
+        # self._build_index()
 
     def get_one_row(self, row_num: int) -> np.ndarray:
         # This function is only load one row in memory
@@ -60,16 +71,18 @@ class VecDB:
         return np.array(vectors)
     
     def retrieve(self, query: Annotated[np.ndarray, (1, DIMENSION)], top_k = 5):
-        scores = []
-        num_records = self._get_num_records()
-        # here we assume that the row number is the ID of each vector
-        for row_num in range(num_records):
-            vector = self.get_one_row(row_num)
-            score = self._cal_score(query, vector)
-            scores.append((score, row_num))
-        # here we assume that if two rows have the same score, return the lowest ID
-        scores = sorted(scores, reverse=True)[:top_k]
-        return [s[1] for s in scores]
+        # scores = []
+        # num_records = self._get_num_records()
+        # # here we assume that the row number is the ID of each vector
+        # for row_num in range(num_records):
+        #     vector = self.get_one_row(row_num)
+        #     score = self._cal_score(query, vector)
+        #     scores.append((score, row_num))
+        # # here we assume that if two rows have the same score, return the lowest ID
+        # scores = sorted(scores, reverse=True)[:top_k]
+        # return [s[1] for s in scores]
+        candidates = self.ivfpq.search(query, top_k)
+        return [self.get_all_rows().tolist().index(candidate.tolist()) for candidate in candidates]
     
     def _cal_score(self, vec1, vec2):
         dot_product = np.dot(vec1, vec2)
@@ -83,3 +96,9 @@ class VecDB:
         data = self.get_all_rows()
         self.ivfpq.fit(data)
 
+def adjust_parameters(data):
+    dataset_size, dimension = data.shape
+    nlist = min(256, max(1, dataset_size // 100))  # Number of clusters
+    nsubvectors = min(dimension, 8)               # Number of subvectors
+    nbits = min(8, max(4, dimension // nsubvectors))  # Bits per subquantizer
+    return nlist, nsubvectors, nbits
