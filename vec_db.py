@@ -111,7 +111,7 @@ class VecDB:
         self.db_path = database_file_path
         self.index_path = index_file_path
         # self.ivfpq = IVFPQ(nlist=150, m=4, nbits=8)
-        self.ivfpq =  CustomIVFPQ(d=DIMENSION,nlist=500, m=35, bits_per_subvector=8)
+        self.ivfpq =  CustomIVFPQ(d=DIMENSION,nlist=150, m=35, bits_per_subvector=8)
 
 
         if new_db:
@@ -161,6 +161,8 @@ class VecDB:
     def retrieve(self, query: Annotated[np.ndarray, (1, DIMENSION)], top_k=5):
         # candidates = self.ivfpq.search(query, top_k)
         # return [self.get_all_rows().tolist().index(candidate.tolist()) for candidate in candidates]
+        query /= np.linalg.norm(query, axis=1, keepdims=True)
+
         return self.ivfpq.search(query,top_k, nprobe=2)
     
     def _cal_score(self, vec1, vec2):
@@ -173,6 +175,6 @@ class VecDB:
     def _build_index(self, vectors: np.ndarray) -> None:
         # Fit the IVFPQ index with the given vectors
         # self.ivfpq.fit(vectors)
-        # vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+        vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
         self.ivfpq.train(vectors)
         self.ivfpq.encode(vectors)

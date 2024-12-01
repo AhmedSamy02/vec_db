@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.cluster import KMeans
 from numpy.linalg import norm
+from sklearn.cluster import KMeans
 class CustomIVFPQ:
     def __init__(self, d, nlist, m, bits_per_subvector):
         self.d = d  # Dimensionality
@@ -50,14 +51,23 @@ class CustomIVFPQ:
         cluster_ids = self.kmeans.predict(data)
     
         pq_codes = np.zeros((data.shape[0], self.m), dtype=np.int32)
+        # for idx, cluster_id in enumerate(cluster_ids):
+        #     centroid = self.centroids[cluster_id]
+        #     residual = data[idx] - centroid  # Compute the residual
+    
+        #     for i in range(self.m):
+        #         subvectors = residual[i * self.subvector_dim: (i + 1) * self.subvector_dim].reshape(1, -1)
+        #         pq_codes[idx, i] = self.pq_codebooks[i].predict(subvectors)
         for idx, cluster_id in enumerate(cluster_ids):
             centroid = self.centroids[cluster_id]
             residual = data[idx] - centroid  # Compute the residual
-    
+
+            pq_codes = np.zeros((data.shape[0], self.m), dtype=np.int32)
             for i in range(self.m):
                 subvectors = residual[i * self.subvector_dim: (i + 1) * self.subvector_dim].reshape(1, -1)
-                pq_codes[idx, i] = self.pq_codebooks[i].predict(subvectors)
-    
+                distances = np.linalg.norm(subvectors - self.pq_codebooks[i].cluster_centers_, axis=1)  # Calculate distances
+                pq_codes[idx, i] = np.argmin(distances)
+
             self.PQinverted_lists[cluster_id].append((idx, pq_codes[idx]))
     
         return cluster_ids, pq_codes
