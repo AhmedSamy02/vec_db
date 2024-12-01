@@ -111,7 +111,7 @@ class VecDB:
         self.db_path = database_file_path
         self.index_path = index_file_path
         # self.ivfpq = IVFPQ(nlist=150, m=4, nbits=8)
-        self.ivfpq =  CustomIVFPQ(d=DIMENSION,nlist=150, m=35, bits_per_subvector=8)
+        self.ivfpq =  CustomIVFPQ(d=DIMENSION,nlist=130, m=35, bits_per_subvector=8)
 
 
         if new_db:

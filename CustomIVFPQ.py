@@ -74,15 +74,17 @@ class CustomIVFPQ:
     
     def encode_Single(self, vector, nprobe=1):
         vector = vector.astype(np.float64).reshape(1, -1)  # Ensure single vector is float64
+        
         cluster_id = self.kmeans.predict(vector)[0]
         centroid = self.centroids[cluster_id]
         residual = vector - centroid  # Compute the residual
-    
+
         pq_codes = np.zeros((1, self.m), dtype=np.int32)
         for i in range(self.m):
             subvectors = residual[:, i * self.subvector_dim: (i + 1) * self.subvector_dim]
-            pq_codes[0, i] = self.pq_codebooks[i].predict(subvectors)
-    
+            distances = np.linalg.norm(subvectors - self.pq_codebooks[i].cluster_centers_, axis=1)  # Calculate distances
+            pq_codes[0, i] = np.argmin(distances)  # Get index of closest centroid
+
         return pq_codes
 
 
