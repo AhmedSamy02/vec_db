@@ -100,7 +100,7 @@
 from typing import Annotated
 import numpy as np
 import os
-from ivfpq import IVFPQ
+from CustomIVFPQ import CustomIVFPQ
 
 DB_SEED_NUMBER = 42
 ELEMENT_SIZE = np.dtype(np.float32).itemsize
@@ -110,8 +110,10 @@ class VecDB:
     def __init__(self, database_file_path="saved_db.dat", index_file_path="index.dat", new_db=True, db_size=None) -> None:
         self.db_path = database_file_path
         self.index_path = index_file_path
-        self.ivfpq = IVFPQ(nlist=150, m=4, nbits=8)
-        
+        # self.ivfpq = IVFPQ(nlist=150, m=4, nbits=8)
+        self.ivfpq =  CustomIVFPQ(d=DIMENSION,nlist=500, m=35, bits_per_subvector=8)
+
+
         if new_db:
             if db_size is None:
                 raise ValueError("You need to provide the size of the database")
@@ -157,8 +159,9 @@ class VecDB:
         return np.array(vectors)
     
     def retrieve(self, query: Annotated[np.ndarray, (1, DIMENSION)], top_k=5):
-        candidates = self.ivfpq.search(query, top_k)
-        return [self.get_all_rows().tolist().index(candidate.tolist()) for candidate in candidates]
+        # candidates = self.ivfpq.search(query, top_k)
+        # return [self.get_all_rows().tolist().index(candidate.tolist()) for candidate in candidates]
+        return self.ivfpq.search(query,top_k, nprobe=2)
     
     def _cal_score(self, vec1, vec2):
         dot_product = np.dot(vec1, vec2)
@@ -169,6 +172,7 @@ class VecDB:
     
     def _build_index(self, vectors: np.ndarray) -> None:
         # Fit the IVFPQ index with the given vectors
-        self.ivfpq.fit(vectors)
-
-
+        # self.ivfpq.fit(vectors)
+        # vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+        self.ivfpq.train(vectors)
+        self.ivfpq.encode(vectors)
