@@ -16,7 +16,7 @@ class CustomIVFPQ:
         self.kmeans = KMeans(n_clusters=self.nlist,init='k-means++', n_init='auto')
         self.centroids = []
         # KMeans for PQ codebooks, one for each subvector
-        self.pq_codebooks = []
+        self.pq_codebooks = [KMeans(n_clusters=self.k, init='k-means++', n_init='auto') for _ in range(m)]
 
         # Inverted lists to store encoded vectors
         self.inverted_lists = {i: [] for i in range(nlist)}
@@ -31,21 +31,18 @@ class CustomIVFPQ:
 
         for idx, label in enumerate(labels):
             self.inverted_lists[label].append(data[idx])
-        for vectors in self.inverted_lists:
-            samples = len(self.inverted_lists[vectors])
-            cluster = int(np.floor(np.log2(samples)))
-            cluster = min(cluster,self.k)
-            kmean = KMeans(n_clusters=cluster,init='k-means++', n_init='auto')
-            self.pq_codebooks.append(kmean)
-        for cluster_id, vectors in self.inverted_lists.items():
-            if len(vectors) == 0:
-                continue
-            cluster_data = np.array(vectors).astype(np.float64)  # Ensure cluster data is float64
+        # for vectors in self.inverted_lists:
+        #     samples = len(self.inverted_lists[vectors])
+        #     cluster = int(np.floor(np.log2(samples)))
+        #     cluster = max(min(cluster,self.k),1)
+        #     kmean = KMeans(n_clusters=cluster,init='k-means++', n_init='auto')
+        #     self.pq_codebooks.append(kmean)
 
-            for i in range(self.m):
-                subvectors = cluster_data[:, i * self.subvector_dim: (i + 1) * self.subvector_dim]
-                self.pq_codebooks[i].fit(subvectors)
+        for i in range(self.m):
+            subvectors = data[:, i * self.subvector_dim: (i + 1) * self.subvector_dim]
+            self.pq_codebooks[i].fit(subvectors)
 
+    
     def encode(self, data):
         data = data.astype(np.float64)  # Ensure encoded data is float64
         cluster_ids = self.kmeans.predict(data)
@@ -72,7 +69,7 @@ class CustomIVFPQ:
     
         return cluster_ids, pq_codes
     
-    def encode_Single(self, vector, nprobe=1):
+    def encode_Single(self, vector):
         vector = vector.astype(np.float64).reshape(1, -1)  # Ensure single vector is float64
         
         cluster_id = self.kmeans.predict(vector)[0]
@@ -86,6 +83,7 @@ class CustomIVFPQ:
             pq_codes[0, i] = np.argmin(distances)  # Get index of closest centroid
 
         return pq_codes
+
 
 
     def search(self, vector, top_k, nprobe=1):
@@ -114,7 +112,7 @@ class CustomIVFPQ:
         return top_k_indices
 
 
-# Test the CustomIVFPQ class
+# # Test the CustomIVFPQ class
 # data = np.random.random((1000, 128))
 
 # # Initialize IVFPQ with 10 clusters, 4 subvectors, and 8 bits per subvector

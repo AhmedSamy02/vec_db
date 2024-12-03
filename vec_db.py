@@ -100,7 +100,7 @@
 from typing import Annotated
 import numpy as np
 import os
-from CustomIVFPQ import CustomIVFPQ
+from b import MergedIVFPQ
 
 DB_SEED_NUMBER = 42
 ELEMENT_SIZE = np.dtype(np.float32).itemsize
@@ -111,7 +111,7 @@ class VecDB:
         self.db_path = database_file_path
         self.index_path = index_file_path
         # self.ivfpq = IVFPQ(nlist=150, m=4, nbits=8)
-        self.ivfpq =  CustomIVFPQ(d=DIMENSION,nlist=130, m=35, bits_per_subvector=8)
+        self.ivfpq =  MergedIVFPQ(d=DIMENSION,nlist=10000, m=14, bits_per_subvector=12)
 
 
         if new_db:
@@ -157,13 +157,40 @@ class VecDB:
         num_records = self._get_num_records()
         vectors = np.memmap(self.db_path, dtype=np.float32, mode='r', shape=(num_records, DIMENSION))
         return np.array(vectors)
-    
+    def get_batch(self, start_idx: int, end_idx: int) -> np.ndarray:
+        """
+        Load a batch of vectors from the database using indices.
+
+        :param start_idx: Starting index (inclusive)
+        :param end_idx: Ending index (exclusive)
+        :return: A NumPy array containing the batch of vectors
+        """
+        try:
+            num_records = self._get_num_records()
+            # Ensure indices are within bounds
+            if start_idx < 0 or end_idx > num_records or start_idx >= end_idx:
+                raise IndexError("Invalid start or end index for batch retrieval.")
+
+            # Calculate the number of rows to fetch and their byte offset
+            num_rows = end_idx - start_idx
+            offset = start_idx * DIMENSION * ELEMENT_SIZE
+
+            # Memory-map the batch into memory
+            mmap_vectors = np.memmap(self.db_path, dtype=np.float32, mode='r', 
+                                     shape=(num_rows, DIMENSION), offset=offset)
+
+            # Convert to a standard NumPy array for easier handling
+            return np.array(mmap_vectors)
+        except Exception as e:
+            return f"An error occurred: {e}"
+
     def retrieve(self, query: Annotated[np.ndarray, (1, DIMENSION)], top_k=5):
+        print("Retrieving")
         # candidates = self.ivfpq.search(query, top_k)
         # return [self.get_all_rows().tolist().index(candidate.tolist()) for candidate in candidates]
         query /= np.linalg.norm(query, axis=1, keepdims=True)
 
-        return self.ivfpq.search(query,top_k, nprobe=2)
+        return self.ivfpq.search(query,top_k, nprobe=60)
     
     def _cal_score(self, vec1, vec2):
         dot_product = np.dot(vec1, vec2)
@@ -173,8 +200,25 @@ class VecDB:
         return cosine_similarity
     
     def _build_index(self, vectors: np.ndarray) -> None:
-        # Fit the IVFPQ index with the given vectors
-        # self.ivfpq.fit(vectors)
-        vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
-        self.ivfpq.train(vectors)
-        self.ivfpq.encode(vectors)
+        """
+        Incrementally builds the IVFPQ index using batches of vectors.
+        """
+        # vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+        # print( "Building index")
+        # self.ivfpq.train(vectors)
+        # print("fitting")
+        # self.ivfpq.encode(vectors)
+        # print("done")
+
+        num_records = self._get_num_records()
+        step = max(num_records // 1, 1)
+        for i in range(0, num_records, step):
+            batch_vectors = self.get_batch(i, min(i + step, num_records))
+            batch_vectors /= np.linalg.norm(batch_vectors, axis=1, keepdims=True)
+
+            print("Training IVFPQ index on batch...")
+            self.ivfpq.train_batch(batch_vectors)
+            print("Encoding batch...")
+            self.ivfpq.encode_batch(batch_vectors)
+            print("Finished batch.")
+
