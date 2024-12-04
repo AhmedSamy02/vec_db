@@ -71,12 +71,12 @@ def eval(results: List[Result]):
 
 
 if __name__ == "__main__":
-    db = VecDB(db_size=10**5)
+    db = VecDB(new_db=False)
 
     all_db = db.get_all_rows()
 
     res1 = run_queries(db, all_db, 5, 10)
-    res = run_queries_old(db, all_db, 5, 10)
+    # res = run_queries_old(db, all_db, 5, 10)
 
     print(eval(res1))
-    print(eval(res))
+    # print(eval(res))

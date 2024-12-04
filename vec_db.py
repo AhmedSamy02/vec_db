@@ -111,10 +111,10 @@ class VecDB:
         self.db_path = database_file_path
         self.index_path = index_file_path
         # self.ivfpq = IVFPQ(nlist=150, m=4, nbits=8)
-        self.ivfpq =  MergedIVFPQ(d=DIMENSION,nlist=10000, m=70, bits_per_subvector=11)
+        self.ivfpq =  MergedIVFPQ(d=DIMENSION,nlist=3000, m=35, bits_per_subvector=10)
         # self.ivfpq =  MergedIVFPQ(d=DIMENSION,nlist=10000, m=70, bits_per_subvector=8) 10**4 0.0 0.09
 
-
+        self._build_index(self.get_all_rows())
         if new_db:
             if db_size is None:
                 raise ValueError("You need to provide the size of the database")
@@ -199,7 +199,7 @@ class VecDB:
         print("Retrieving")
         # candidates = self.ivfpq.search(query, top_k)
         # return [self.get_all_rows().tolist().index(candidate.tolist()) for candidate in candidates]
-        query /= np.linalg.norm(query, axis=1, keepdims=True)
+        # query /= np.linalg.norm(query, axis=1, keepdims=True)
 
         return self.ivfpq.search(query,top_k, nprobe=100)
     
@@ -214,7 +214,8 @@ class VecDB:
         """
         Incrementally builds the IVFPQ index using batches of vectors.
         """
-        vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+        # vectors = self.get_all_rows()
+        # vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
         print( "Building index")
         self.ivfpq.train(vectors)
         print("fitting")
