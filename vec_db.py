@@ -111,7 +111,8 @@ class VecDB:
         self.db_path = database_file_path
         self.index_path = index_file_path
         # self.ivfpq = IVFPQ(nlist=150, m=4, nbits=8)
-        self.ivfpq =  MergedIVFPQ(d=DIMENSION,nlist=10000, m=14, bits_per_subvector=12)
+        self.ivfpq =  MergedIVFPQ(d=DIMENSION,nlist=10000, m=70, bits_per_subvector=11)
+        # self.ivfpq =  MergedIVFPQ(d=DIMENSION,nlist=10000, m=70, bits_per_subvector=8) 10**4 0.0 0.09
 
 
         if new_db:
@@ -183,14 +184,24 @@ class VecDB:
             return np.array(mmap_vectors)
         except Exception as e:
             return f"An error occurred: {e}"
-
+    def retrieve_old(self, query: Annotated[np.ndarray, (1, DIMENSION)], top_k = 5):
+        scores = []
+        num_records = self._get_num_records()
+        # here we assume that the row number is the ID of each vector
+        for row_num in range(num_records):
+            vector = self.get_one_row(row_num)
+            score = self._cal_score(query, vector)
+            scores.append((score, row_num))
+        # here we assume that if two rows have the same score, return the lowest ID
+        scores = sorted(scores, reverse=True)[:top_k]
+        return [s[1] for s in scores]
     def retrieve(self, query: Annotated[np.ndarray, (1, DIMENSION)], top_k=5):
         print("Retrieving")
         # candidates = self.ivfpq.search(query, top_k)
         # return [self.get_all_rows().tolist().index(candidate.tolist()) for candidate in candidates]
         query /= np.linalg.norm(query, axis=1, keepdims=True)
 
-        return self.ivfpq.search(query,top_k, nprobe=60)
+        return self.ivfpq.search(query,top_k, nprobe=100)
     
     def _cal_score(self, vec1, vec2):
         dot_product = np.dot(vec1, vec2)
@@ -203,22 +214,22 @@ class VecDB:
         """
         Incrementally builds the IVFPQ index using batches of vectors.
         """
-        # vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
-        # print( "Building index")
-        # self.ivfpq.train(vectors)
-        # print("fitting")
-        # self.ivfpq.encode(vectors)
-        # print("done")
+        vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+        print( "Building index")
+        self.ivfpq.train(vectors)
+        print("fitting")
+        self.ivfpq.encode(vectors)
+        print("done")
 
-        num_records = self._get_num_records()
-        step = max(num_records // 1, 1)
-        for i in range(0, num_records, step):
-            batch_vectors = self.get_batch(i, min(i + step, num_records))
-            batch_vectors /= np.linalg.norm(batch_vectors, axis=1, keepdims=True)
+        # num_records = self._get_num_records()
+        # step = max(num_records // 1, 1)
+        # for i in range(0, num_records, step):
+        #     batch_vectors = self.get_batch(i, min(i + step, num_records))
+        #     batch_vectors /= np.linalg.norm(batch_vectors, axis=1, keepdims=True)
 
-            print("Training IVFPQ index on batch...")
-            self.ivfpq.train_batch(batch_vectors)
-            print("Encoding batch...")
-            self.ivfpq.encode_batch(batch_vectors)
-            print("Finished batch.")
+        #     print("Training IVFPQ index on batch...")
+        #     self.ivfpq.train_batch(batch_vectors)
+        #     print("Encoding batch...")
+        #     self.ivfpq.encode_batch(batch_vectors)
+        #     print("Finished batch.")
 
