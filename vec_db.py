@@ -201,7 +201,7 @@ class VecDB:
         # return [self.get_all_rows().tolist().index(candidate.tolist()) for candidate in candidates]
         # query /= np.linalg.norm(query, axis=1, keepdims=True)
 
-        return self.ivfpq.search(query,top_k, nprobe=100)
+        return self.ivfpq.search(query,top_k, nprobe=5)
     
     def _cal_score(self, vec1, vec2):
         dot_product = np.dot(vec1, vec2)
@@ -221,7 +221,7 @@ class VecDB:
         print("fitting")
         self.ivfpq.encode(vectors)
         print("done")
-
+        self.ivfpq.save_model()
         # num_records = self._get_num_records()
         # step = max(num_records // 1, 1)
         # for i in range(0, num_records, step):

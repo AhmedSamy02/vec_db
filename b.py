@@ -20,8 +20,8 @@ class MergedIVFPQ:
         assert d % m == 0, "Dimensionality must be divisible by the number of subvectors (m)."
 
         # Initialize KMeans for IVF and PQ
-        self.kmeans = MiniBatchKMeans(n_clusters=self.nlist, init='k-means++', n_init=20,batch_size=100000, max_iter=500 )
-        self.pq_codebooks = [MiniBatchKMeans(n_clusters=self.k,init='k-means++', n_init=20,batch_size=100000, max_iter=500) for _ in range(m)]
+        self.kmeans = KMeans(n_clusters=self.nlist, init='k-means++', n_init='auto' )
+        self.pq_codebooks = [KMeans(n_clusters=self.k,init='k-means++', n_init='auto') for _ in range(m)]
 
         self.inverted_lists = {i: [] for i in range(nlist)}  # Inverted file structure
 

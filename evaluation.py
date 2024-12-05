@@ -43,7 +43,8 @@ def run_queries_old(db, np_rows, top_k, num_runs):
         actual_ids = np.argsort(np_rows.dot(query.T).T / (np.linalg.norm(np_rows, axis=1) * np.linalg.norm(query)), axis= 1).squeeze().tolist()[::-1]
         toc = time.time()
         np_run_time = toc - tic
-        
+        print('actual',actual_ids)
+        print('db',db_ids)
         results.append(Result(run_time, top_k, db_ids, actual_ids))
     return results
 
@@ -56,14 +57,18 @@ def eval(results: List[Result]):
         # case for retrieving number not equal to top_k, score will be the lowest
         if len(set(res.db_ids)) != res.top_k or len(res.db_ids) != res.top_k:
             scores.append( -1 * len(res.actual_ids) * res.top_k)
+            print("not top_k")
             continue
         score = 0
         for id in res.db_ids:
             try:
+                print(res.actual_ids.index(id))
+                print(res.top_k,"\n")
                 ind = res.actual_ids.index(id)
                 if ind > res.top_k * 3:
                     score -= ind
             except:
+                print("not in index")
                 score -= len(res.actual_ids)
         scores.append(score)
 
@@ -71,12 +76,12 @@ def eval(results: List[Result]):
 
 
 if __name__ == "__main__":
-    db = VecDB(new_db=False)
+    db = VecDB(db_size= 10**4)
 
     all_db = db.get_all_rows()
 
     res1 = run_queries(db, all_db, 5, 10)
     # res = run_queries_old(db, all_db, 5, 10)
-
+    
     print(eval(res1))
     # print(eval(res))
