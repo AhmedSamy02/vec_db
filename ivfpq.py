@@ -15,7 +15,6 @@ class IVF_PQ:
         self.nprobe = nprobe 
         self.batch_size = batch_size  
         self.index_path = index_file
-        self.data = None
         self.base_dir = os.path.join(os.getcwd(), self.index_path)
     def fit(self, vectors: np.ndarray) -> None:
         n, d = vectors.shape
@@ -67,6 +66,22 @@ class IVF_PQ:
             return joblib.load(f)
 
     def search(self, query: np.ndarray, top_k: int) -> List[int]:
+        top_k_nearest = 0
+        probes = 0
+        if self.index_path == "saved_db_1m":
+            top_k_nearest = 200 * top_k
+            probes = self.nprobe
+        elif self.index_path == "saved_db_10m":
+            top_k_nearest = 300 * top_k
+            probes = 20
+        elif self.index_path == "saved_db_15m":
+            probes = self.nprobe
+            top_k_nearest = 200 * top_k
+        else:
+            top_k_nearest = 500 * top_k
+            probes = 20
+        
+            
         if query.ndim == 1:
             query = query.reshape(1, -1)
 
@@ -76,7 +91,7 @@ class IVF_PQ:
         subquantizer = self.load_subquantizer()
         distances_to_centroids = np.linalg.norm(centroids - query, axis=1)
         del centroids
-        nearest_clusters = np.argsort(distances_to_centroids)[:self.nprobe]
+        nearest_clusters = np.argsort(distances_to_centroids)[:probes]
         del distances_to_centroids
         heap = []
         for cluster_id in nearest_clusters:
@@ -96,7 +111,7 @@ class IVF_PQ:
                 distances = np.linalg.norm(reconstructed_vectors - query, axis=1)
 
                 for idx, dist in zip(batch_indices, distances):
-                    if len(heap) < 250 * top_k:
+                    if len(heap) < top_k_nearest:
                         heappush(heap, (-dist, idx))
                     else:
                         if -dist > heap[0][0]:

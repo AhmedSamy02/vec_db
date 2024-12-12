@@ -13,7 +13,7 @@ class VecDB:
     def __init__(self, database_file_path="saved_db_1M.dat", index_file_path="saved_db_1m", new_db=True, db_size=None)-> None:
         self.db_path = database_file_path
         self.index_path = index_file_path
-        self.ivf_pq = IVF_PQ(nlist=100, m=7, k=256, nprobe=15,index_file=index_file_path) # gzip and joblib
+        self.ivf_pq = IVF_PQ(nlist=100, m=7, k=256, nprobe=10,index_file=index_file_path) # gzip and joblib
         # self.ivf_pq = IVF_PQ(nlist=100, m=5, k=256, nprobe=10,index_file=index_file_path) # memmap
 
         if new_db:
