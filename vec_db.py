@@ -76,8 +76,7 @@ class VecDB:
         cosine_similarity = dot_product / (norm_vec1 * norm_vec2)
         return cosine_similarity
 
-    def retrieve(self, query: np.ndarray, top_k=5):
-        query = query.squeeze()
+    def retrieve(self, query: Annotated[np.ndarray, (1, DIMENSION)], top_k = 5):
         query /= np.linalg.norm(query)
         list_ids = self.ivf_pq.search(query, top_k)
         best_ids = []
