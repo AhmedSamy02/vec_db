@@ -66,16 +66,6 @@ class IVF_PQ:
             return joblib.load(f)
 
     def search(self, query: np.ndarray, top_k: int) -> List[int]:
-        top_k_nearest = 200 * top_k
-        probes = self.nprobe
-        if self.index_path == "saved_db_10m":
-            top_k_nearest = 550 * top_k
-            probes = 10
-        elif self.index_path == "saved_db_20m":
-            top_k_nearest = 550 * top_k
-            probes = 10
-        
-            
         if query.ndim == 1:
             query = query.reshape(1, -1)
 
@@ -85,7 +75,7 @@ class IVF_PQ:
         subquantizer = self.load_subquantizer()
         distances_to_centroids = np.linalg.norm(centroids - query, axis=1)
         del centroids
-        nearest_clusters = np.argsort(distances_to_centroids)[:probes]
+        nearest_clusters = np.argsort(distances_to_centroids)[:self.nprobe]
         del distances_to_centroids
         heap = []
         for cluster_id in nearest_clusters:
@@ -105,7 +95,7 @@ class IVF_PQ:
                 distances = np.linalg.norm(reconstructed_vectors - query, axis=1)
 
                 for idx, dist in zip(batch_indices, distances):
-                    if len(heap) < top_k_nearest:
+                    if len(heap) < 200 * top_k:
                         heappush(heap, (-dist, idx))
                     else:
                         if -dist > heap[0][0]:
