@@ -160,7 +160,7 @@ class IVF_PQ:
                 distances = np.linalg.norm(reconstructed_vectors - query, axis=1)
 
                 for idx, dist in zip(batch_indices, distances):
-                    if len(heap) <  200 * top_k:
+                    if len(heap) <  250 * top_k:
                         heappush(heap, (-dist, idx))
                     else:
                         if -dist > heap[0][0]:
