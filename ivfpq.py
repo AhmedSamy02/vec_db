@@ -1,34 +1,33 @@
-import heapq
+from heapq import heappush, heappop
 from typing import List
 import numpy as np
 from sklearn.cluster import MiniBatchKMeans
+import joblib
+import gzip
+import os
+BATCH_SIZE = 1000
 class IVF_PQ:
-    def __init__(self, nlist: int, m: int, k: int, nprobe: int, batch_size: int = 2048):
-        self.nlist = nlist  # Number of Voronoi cells (clusters)
-        self.m = m  # Number of subspaces for Product Quantization
-        self.k = k  # Number of centroids per subspace
-        self.nprobe = nprobe  # Number of clusters to probe during search
-        self.batch_size = batch_size  # Mini-batch size for KMeans
-        self.centroids = None  # Cluster centroids for IVF
-        self.posting_lists = None  # Lists of indices for each cluster
-        self.subquantizers = []  # PQ subquantizers
-        self.quantized_data = {}  # Encoded vectors per posting list
-
+    def __init__(self, nlist: int, m: int, k: int, nprobe: int,index_file:str,batch_size: int = 2048):
+        self.nlist = nlist
+        self.m = m
+        self.k = k
+        self.nprobe = nprobe 
+        self.batch_size = batch_size  
+        self.index_path = index_file
+        self.data = None
+        self.base_dir = os.path.join(os.getcwd(), self.index_path)
     def fit(self, vectors: np.ndarray) -> None:
         n, d = vectors.shape
         assert d % self.m == 0
 
-        # Step 1: IVF clustering using MiniBatchKMeans
         mbkmeans = MiniBatchKMeans(n_clusters=self.nlist, batch_size=self.batch_size, init='k-means++', max_iter=500, random_state=42)
         self.centroids = mbkmeans.fit(vectors).cluster_centers_
         assignments = mbkmeans.predict(vectors)
 
-        # Step 2: Initialize posting lists
         self.posting_lists = {i: [] for i in range(self.nlist)}
         for i, label in enumerate(assignments):
             self.posting_lists[label].append(i)
 
-        # Step 3: Product Quantization
         d_sub = d // self.m
         for m in range(self.m):
             subvector_data = vectors[:, m * d_sub:(m + 1) * d_sub]
@@ -36,7 +35,6 @@ class IVF_PQ:
             subquantizer = sub_kmeans.fit(subvector_data)
             self.subquantizers.append(subquantizer)
 
-            # Store quantized indices for each cluster
             for cluster_id, indices in self.posting_lists.items():
                 if cluster_id not in self.quantized_data:
                     self.quantized_data[cluster_id] = []
@@ -44,54 +42,67 @@ class IVF_PQ:
                 quantized_indices = subquantizer.predict(subvector_cluster)
                 self.quantized_data[cluster_id].append(quantized_indices)
 
+    def _load_centroids(self):
+        centroids_file = os.path.join(self.index_path, "centroids.csv")
+        with gzip.open(centroids_file, 'rb') as f:
+            return joblib.load(f)["centroids"]
+
+    def _load_posting_list(self, cluster_id):
+        posting_list_file = os.path.join(self.index_path, f"posting_list_{cluster_id}.csv")
+        with gzip.open(posting_list_file, 'rb') as f:
+            return joblib.load(f)
+
+    def _load_subquantizer(self):
+        subquantizer_file = os.path.join(self.index_path, "subquantizers_centroids.csv")
+        with gzip.open(subquantizer_file, 'rb') as f:
+            subquantizers_centroids = joblib.load(f)
+        return [sq["centroids"] for sq in subquantizers_centroids]
+
+    def _load_quantized_data(self, cluster_id):
+        quantized_data_file = os.path.join(self.index_path, f"quantized_data_{cluster_id}.csv")
+        with gzip.open(quantized_data_file, 'rb') as f:
+            return joblib.load(f)
+
     def search(self, query: np.ndarray, top_k: int) -> List[int]:
-        top_k = top_k * 100
         if query.ndim == 1:
             query = query.reshape(1, -1)
 
         d_sub = query.shape[1] // self.m
 
-        # Step 1: Find nearest clusters
-        distances_to_centroids = np.linalg.norm(self.centroids - query, axis=1)
+        centroids = self._load_centroids()
+        subquantizer = self._load_subquantizer()
+        distances_to_centroids = np.linalg.norm(centroids - query, axis=1)
+        del centroids
         nearest_clusters = np.argsort(distances_to_centroids)[:self.nprobe]
-
-        candidates = []
-        candidate_scores = []
-
-        # Step 2: Compute distances incrementally to avoid reconstructing all vectors
+        del distances_to_centroids
+        heap = []
         for cluster_id in nearest_clusters:
-            cluster_data = self.quantized_data[cluster_id]
-            cluster_indices = self.posting_lists[cluster_id]
+            posting_list = self._load_posting_list(cluster_id)
+            quantized_data = self._load_quantized_data(cluster_id)
+            num_points = len(posting_list)
+            
+            for batch_start in range(0, num_points, self.batch_size):
+                batch_indices = posting_list[batch_start:batch_start + self.batch_size]
+                reconstructed_vectors = np.zeros((len(batch_indices), query.shape[1]))
 
-            # Initialize scores for this cluster
-            cluster_distances = np.zeros(len(cluster_indices))
+                for m in range(self.m):
+                    subquantizer_centroids_for_m = subquantizer[m]
+                    quantized_indices = quantized_data[m][batch_start:batch_start + self.batch_size]
+                    reconstructed_vectors[:, m * d_sub:(m + 1) * d_sub] = subquantizer_centroids_for_m[quantized_indices]
 
-            # Incrementally add the distance contributions from each subspace
-            for m in range(self.m):
-                subquantizer = self.subquantizers[m]
-                quantized_indices = cluster_data[m]
-                cluster_centers = subquantizer.cluster_centers_[quantized_indices]
+                distances = np.linalg.norm(reconstructed_vectors - query, axis=1)
 
-                query_segment = query[:, m * d_sub:(m + 1) * d_sub]
-                cluster_distances += np.sum((cluster_centers - query_segment) ** 2, axis=1)
+                for idx, dist in zip(batch_indices, distances):
+                    if len(heap) < 200 * top_k:
+                        heappush(heap, (-dist, idx))
+                    else:
+                        if -dist > heap[0][0]:
+                            heappop(heap)
+                            heappush(heap, (-dist, idx))
 
-            # Update the candidate list
-            # use a heap to maintain top-k candidates efficiently
-            for i, idx in enumerate(cluster_indices):
-                score = -cluster_distances[i]
-                if len(candidates) < top_k:
-                    heapq.heappush(candidates, idx)
-                    heapq.heappush(candidate_scores, score)
-                else:
-                    if score > candidate_scores[0]:
-                        heapq.heappop(candidates)
-                        heapq.heappush(candidates, idx)
-                        heapq.heappop(candidate_scores)
-                        heapq.heappush(candidate_scores, score)
+        del subquantizer
+        del quantized_data
+        del posting_list
+        results = sorted(heap, key=lambda x: -x[0])
+        return [idx for _, idx in results]
 
-        # Step 3: Select top-k candidates
-        candidates = np.array(candidates)
-        candidate_scores = np.array(candidate_scores)
-        top_k_indices = np.argsort(candidate_scores)[:top_k]
-
-        return candidates[top_k_indices].tolist()

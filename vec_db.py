@@ -2,7 +2,6 @@ import os
 import gzip
 from typing import Annotated
 import numpy as np
-from sklearn.cluster import KMeans
 import joblib
 from ivfpq import IVF_PQ
 
@@ -11,14 +10,10 @@ ELEMENT_SIZE = np.dtype(np.float32).itemsize
 DIMENSION = 70
 
 class VecDB:
-    def __init__(self, database_file_path="saved_db_1M.dat", index_file_path="index_1M.dat", new_db=True, db_size=None):
+    def __init__(self, database_file_path="saved_db_1M.dat", index_file_path="saved_db_1m", new_db=True, db_size=None):
         self.db_path = database_file_path
         self.index_path = index_file_path
-        self.nprobe = 30  # Increased nprobe for better retrieval
-        # self.ivf_pq = IVF_PQ(nlist=100, m=2, k=128, nprobe=20)  # For 15 Millions
-        # self.ivf_pq = IVF_PQ(nlist=100, m=7, k=256, nprobe=20)  # For 10 Millions
-        self.ivf_pq = IVF_PQ(nlist=64, m=10, k=256, nprobe=20)  # For 1 Millions
-        
+        self.ivf_pq = IVF_PQ(nlist=100, m=7, k=256, nprobe=10,index_file=index_file_path)
         
         if new_db:
             if db_size is None:
@@ -29,7 +24,7 @@ class VecDB:
                 os.remove(self.index_path)
             self.generate_database(db_size)
         else:
-            self.load_index()
+            pass
 
     def generate_database(self, size: int) -> None:
         rng = np.random.default_rng(DB_SEED_NUMBER)
@@ -71,7 +66,7 @@ class VecDB:
 
     def _build_index(self):
         vectors = self.get_all_rows()
-        self.ivf_pq.fit(vectors)  # Rebuild index with updated settings
+        self.ivf_pq.fit(vectors)
         self.save_index()
         
     def _cal_score(self, vec1, vec2):
@@ -83,54 +78,45 @@ class VecDB:
 
     def retrieve(self, query: np.ndarray, top_k=5):
         query = query.squeeze()
-        query /= np.linalg.norm(query)  # Normalize query
+        query /= np.linalg.norm(query)
         list_ids = self.ivf_pq.search(query, top_k)
-        liss_res = []
-        for i in list_ids:
-            v = self.get_one_row(i)
-            liss_res.append((self._cal_score(query, v),i))
-        return [x[1] for x in sorted(liss_res, key=lambda x: x[0], reverse=True)[:top_k]]  
-
+        best_ids = []
+        for id in list_ids:
+            vector= self.get_one_row(id)
+            best_ids.append((self._cal_score(query, vector),id))
+        return [x[1] for x in sorted(best_ids, key=lambda x: x[0], reverse=True)[:top_k]]  
+    
     def save_index(self):
-        """Save the index to a compressed file."""
-        with gzip.open(self.index_path, "wb") as f:
+        os.makedirs(self.index_path, exist_ok=True)
+        centroids_file = os.path.join(self.index_path, "centroids.csv")
+        with gzip.open(centroids_file, "wb") as f:
             joblib.dump(
-                {
-                    "centroids": self.ivf_pq.centroids.astype(np.float16), 
-                    "posting_lists": {
-                        k: np.array(v, dtype=np.uint32)  # Store as compact arrays
-                        for k, v in self.ivf_pq.posting_lists.items()
-                    },
-                    "subquantizers": [
-                        {"centroids": sq.cluster_centers_.astype(np.float16)}  # Reduced precision
-                        for sq in self.ivf_pq.subquantizers
-                    ],
-                    "quantized_data": {
-                        k: [np.array(q, dtype=np.uint8) for q in v]  # Compact subquantizer indices
-                        for k, v in self.ivf_pq.quantized_data.items()
-                    },
-                },
-                f,
-                compress=9,  # Maximum compression
-            )
+            {"centroids": self.ivf_pq.centroids.astype(np.float16)},
+            f,
+            compress=9,
+        )
+        
+        subquantizer_centroids = [
+            {"centroids": sq.cluster_centers_.astype(np.float16)} for sq in self.ivf_pq.subquantizers
+        ]
+        subquantizers_file = os.path.join(self.index_path, "subquantizers_centroids.csv")
+        with gzip.open(subquantizers_file, "wb") as f:
+            joblib.dump(subquantizer_centroids, f, compress=9)
 
-    def load_index(self):
-        with gzip.open(self.index_path, "rb") as f:
-            try:
-                data = joblib.load(f)
-                self.ivf_pq.centroids = data["centroids"].astype(np.float16)  # Restore precision
-                self.ivf_pq.posting_lists = {
-                    k: list(v) for k, v in data["posting_lists"].items()
-                }
-                self.ivf_pq.subquantizers = []
-                for sq in data["subquantizers"]:
-                    subquantizer = KMeans(n_clusters=self.ivf_pq.k)
-                    subquantizer.cluster_centers_ = sq["centroids"].astype(np.float16)
-                    self.ivf_pq.subquantizers.append(subquantizer)
-                self.ivf_pq.quantized_data = {
-                    k: [np.array(q, dtype=np.uint8) for q in v]
-                    for k, v in data["quantized_data"].items()
-                }
-            except Exception as e:
-                print(f"Error loading index: {e}. Rebuilding index...")
-                self._build_index()
+        for cluster_id, posting_list in self.ivf_pq.posting_lists.items():
+            posting_list_file = os.path.join(self.index_path, f"posting_list_{cluster_id}.csv")
+            with gzip.open(posting_list_file, "wb") as f:
+                joblib.dump(
+                    np.array(posting_list, dtype=np.uint32),
+                    f,
+                    compress=9,
+                )
+
+        for cluster_id, quantized_data in self.ivf_pq.quantized_data.items():
+            quantized_data_file = os.path.join(self.index_path, f"quantized_data_{cluster_id}.csv")
+            with gzip.open(quantized_data_file, "wb") as f:
+                joblib.dump(
+                    [np.array(q, dtype=np.uint8) for q in quantized_data],
+                    f,
+                    compress=9,
+                )
