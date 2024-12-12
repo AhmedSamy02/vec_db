@@ -66,20 +66,14 @@ class IVF_PQ:
             return joblib.load(f)
 
     def search(self, query: np.ndarray, top_k: int) -> List[int]:
-        top_k_nearest = 0
-        probes = 0
-        if self.index_path == "saved_db_1m":
-            top_k_nearest = 200 * top_k
-            probes = self.nprobe
-        elif self.index_path == "saved_db_10m":
-            top_k_nearest = 200 * top_k
+        top_k_nearest = 200 * top_k
+        probes = self.nprobe
+        if self.index_path == "saved_db_10m":
+            top_k_nearest = 100 * top_k
             probes = 20
-        elif self.index_path == "saved_db_15m":
-            probes = self.nprobe
-            top_k_nearest = 200 * top_k
-        else:
-            top_k_nearest = 300 * top_k
-            probes = 25
+        elif self.index_path == "saved_db_20m":
+            top_k_nearest = 100 * top_k
+            probes = 20
         
             
         if query.ndim == 1:
