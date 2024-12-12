@@ -5,6 +5,7 @@ from sklearn.cluster import MiniBatchKMeans
 import joblib
 import gzip
 import os
+DIMENSION = 70
 BATCH_SIZE = 1000
 class IVF_PQ:
     def __init__(self, nlist: int, m: int, k: int, nprobe: int,index_file:str,batch_size: int = 2048):
@@ -132,8 +133,8 @@ class IVF_PQ:
             query = query.reshape(1, -1)
 
         d_sub = query.shape[1] // self.m
-        centroids = self._load_centroids()
-        subquantizer = self._load_subquantizer()
+        centroids = self.load_centroids()
+        subquantizer = self.load_subquantizer()
         centroids.reshape(-1, query.shape[1])
 
         distances_to_centroids = np.linalg.norm(centroids - query, axis=1)
@@ -143,8 +144,8 @@ class IVF_PQ:
         heap = []
 
         for cluster_id in nearest_clusters:
-            posting_list = self._load_posting_list(cluster_id)
-            quantized_data = self._load_quantized_data(cluster_id)
+            posting_list = self.load_posting_list(cluster_id)
+            quantized_data = self.load_quantized_data(cluster_id)
             num_points = len(posting_list)
 
             for batch_start in range(0, num_points, self.batch_size):
