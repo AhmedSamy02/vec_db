@@ -72,14 +72,14 @@ class IVF_PQ:
             top_k_nearest = 200 * top_k
             probes = self.nprobe
         elif self.index_path == "saved_db_10m":
-            top_k_nearest = 300 * top_k
+            top_k_nearest = 200 * top_k
             probes = 20
         elif self.index_path == "saved_db_15m":
             probes = self.nprobe
             top_k_nearest = 200 * top_k
         else:
-            top_k_nearest = 500 * top_k
-            probes = 20
+            top_k_nearest = 300 * top_k
+            probes = 25
         
             
         if query.ndim == 1:
