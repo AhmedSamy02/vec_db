@@ -42,23 +42,23 @@ class IVF_PQ:
                 quantized_indices = subquantizer.predict(subvector_cluster)
                 self.quantized_data[cluster_id].append(quantized_indices)
 
-    def _load_centroids(self):
+    def load_centroids(self):
         centroids_file = os.path.join(self.index_path, "centroids.csv")
         with gzip.open(centroids_file, 'rb') as f:
             return joblib.load(f)["centroids"]
 
-    def _load_posting_list(self, cluster_id):
+    def load_posting_list(self, cluster_id):
         posting_list_file = os.path.join(self.index_path, f"posting_list_{cluster_id}.csv")
         with gzip.open(posting_list_file, 'rb') as f:
             return joblib.load(f)
 
-    def _load_subquantizer(self):
+    def load_subquantizer(self):
         subquantizer_file = os.path.join(self.index_path, "subquantizers_centroids.csv")
         with gzip.open(subquantizer_file, 'rb') as f:
             subquantizers_centroids = joblib.load(f)
         return [sq["centroids"] for sq in subquantizers_centroids]
 
-    def _load_quantized_data(self, cluster_id):
+    def load_quantized_data(self, cluster_id):
         quantized_data_file = os.path.join(self.index_path, f"quantized_data_{cluster_id}.csv")
         with gzip.open(quantized_data_file, 'rb') as f:
             return joblib.load(f)
@@ -69,16 +69,16 @@ class IVF_PQ:
 
         d_sub = query.shape[1] // self.m
 
-        centroids = self._load_centroids()
-        subquantizer = self._load_subquantizer()
+        centroids = self.load_centroids()
+        subquantizer = self.load_subquantizer()
         distances_to_centroids = np.linalg.norm(centroids - query, axis=1)
         del centroids
         nearest_clusters = np.argsort(distances_to_centroids)[:self.nprobe]
         del distances_to_centroids
         heap = []
         for cluster_id in nearest_clusters:
-            posting_list = self._load_posting_list(cluster_id)
-            quantized_data = self._load_quantized_data(cluster_id)
+            posting_list = self.load_posting_list(cluster_id)
+            quantized_data = self.load_quantized_data(cluster_id)
             num_points = len(posting_list)
             
             for batch_start in range(0, num_points, self.batch_size):

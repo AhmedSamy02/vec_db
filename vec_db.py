@@ -10,7 +10,7 @@ ELEMENT_SIZE = np.dtype(np.float32).itemsize
 DIMENSION = 70
 
 class VecDB:
-    def __init__(self, database_file_path="saved_db_1M.dat", index_file_path="saved_db_1m", new_db=True, db_size=None):
+    def __init__(self, database_file_path="saved_db_1M.dat", index_file_path="saved_db_1m", new_db=True, db_size=None)-> None:
         self.db_path = database_file_path
         self.index_path = index_file_path
         self.ivf_pq = IVF_PQ(nlist=100, m=7, k=256, nprobe=10,index_file=index_file_path)
@@ -84,7 +84,7 @@ class VecDB:
         for id in list_ids:
             vector= self.get_one_row(id)
             best_ids.append((self._cal_score(query, vector),id))
-        return [x[1] for x in sorted(best_ids, key=lambda x: x[0], reverse=True)[:top_k]]  
+        return [x[1] for x in sorted(best_ids, key=lambda x: x[0], reverse=True)[:top_k]]     
     
     def save_index(self):
         os.makedirs(self.index_path, exist_ok=True)
