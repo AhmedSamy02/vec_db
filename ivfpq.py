@@ -105,8 +105,8 @@ class IVF_PQ:
         del subquantizer
         del quantized_data
         del posting_list
-        results = sorted(heap, key=lambda x: -x[0])
-        return [idx for _, idx in results]
+        # results = sorted(heap, key=lambda x: -x[0])
+        return [idx for _, idx in heap]
     
     
 # Memmap

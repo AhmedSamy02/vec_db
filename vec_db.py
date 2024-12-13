@@ -84,7 +84,7 @@ class VecDB:
         for id in list_ids:
             vector= self.get_one_row(id)
             best_ids.append((self._cal_score(query, vector),id))
-        return [x[1] for x in sorted(best_ids, key=lambda x: x[0], reverse=True)[:top_k]]     
+        return [x[1] for x in sorted(best_ids, key=lambda x: x[0], reverse=True)[:top_k]]
     
     def save_index(self):
         os.makedirs(self.index_path, exist_ok=True)
